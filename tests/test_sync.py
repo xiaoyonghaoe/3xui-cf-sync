@@ -178,6 +178,39 @@ class SyncTests(unittest.TestCase):
             self.assertEqual(r6["deleted"], 1)
             self.assertEqual(kv.deletes[-1], ["sub:sub_bob_02"])
 
+    def test_ignores_random_reality_sid_rotation(self):
+        inbounds = [
+            {
+                "enable": True,
+                "settings": json.dumps(
+                    {"clients": [{"email": "alice", "subId": "sub_alice_01", "enable": True, "expiryTime": 0}]}
+                ),
+                "clientStats": [{"email": "alice", "up": 100, "down": 200, "total": 0, "enable": True}],
+            }
+        ]
+        subs = {
+            "sub_alice_01": {
+                "raw": base64.b64encode(b"vless://uuid@1.1.1.1:443?security=reality&sid=aaaa1111#Alice").decode(),
+                "clash": "proxies:\n  - name: Alice",
+                "json": "",
+            }
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = make_config(Path(tmp) / "state.json")
+            xui = FakeXuiClient(inbounds, subs)
+            kv = FakeKVClient()
+
+            r1 = run_sync(cfg, xui, kv, now_ts=1000.0)
+            self.assertEqual(r1["pushed"], 1)
+
+            # Rotate Reality sid as 3x-ui does per /sub/ request
+            subs["sub_alice_01"]["raw"] = base64.b64encode(
+                b"vless://uuid@1.1.1.1:443?security=reality&sid=bbbb2222#Alice"
+            ).decode()
+            r2 = run_sync(cfg, xui, kv, now_ts=1100.0)
+            self.assertEqual(r2["pushed"], 0)
+            self.assertEqual(r2["skipped"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

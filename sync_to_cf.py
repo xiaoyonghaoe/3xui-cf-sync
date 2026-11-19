@@ -362,15 +362,40 @@ def _canonical_json(obj: Any) -> str:
     return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _normalize_node_for_hash(node_uri: str) -> str:
+    """Normalize per-request randomized URI params (e.g. Reality sid) for stable diffing."""
+    try:
+        parts = urllib.parse.urlsplit(node_uri)
+        if not parts.query:
+            return node_uri
+        pairs = urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
+        norm_pairs = [(k, "__volatile__" if k == "sid" else v) for k, v in pairs]
+        norm_query = urllib.parse.urlencode(norm_pairs)
+        return urllib.parse.urlunsplit((parts.scheme, parts.netloc, parts.path, norm_query, parts.fragment))
+    except Exception:
+        return node_uri
+
+
+def _snapshot_for_hash(snapshot: dict[str, Any], exclude_keys: set[str]) -> dict[str, Any]:
+    stable = {k: v for k, v in snapshot.items() if k not in exclude_keys}
+    nodes = stable.get("nodes")
+    if isinstance(nodes, list) and nodes:
+        norm_nodes = [_normalize_node_for_hash(u) for u in nodes]
+        stable["nodes"] = norm_nodes
+        if "raw" in stable:
+            stable["raw"] = "\n".join(norm_nodes)
+    return stable
+
+
 def compute_content_hash(snapshot: dict[str, Any]) -> str:
     """Hash everything except mutable usage counters (up/down) and syncedAt."""
-    stable = {k: v for k, v in snapshot.items() if k not in {"up", "down", "syncedAt"}}
+    stable = _snapshot_for_hash(snapshot, {"up", "down", "syncedAt"})
     return hashlib.sha256(_canonical_json(stable).encode("utf-8")).hexdigest()
 
 
 def compute_full_hash(snapshot: dict[str, Any]) -> str:
     """Hash complete snapshot excluding syncedAt."""
-    stable = {k: v for k, v in snapshot.items() if k != "syncedAt"}
+    stable = _snapshot_for_hash(snapshot, {"syncedAt"})
     return hashlib.sha256(_canonical_json(stable).encode("utf-8")).hexdigest()
 
 
