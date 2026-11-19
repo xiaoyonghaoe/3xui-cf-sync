@@ -1,0 +1,11 @@
+[Unit]
+Description=Sync 3x-ui user subscriptions to Cloudflare KV
+After=network-online.target x-ui.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/3xui-cf-sync
+ExecStart=/usr/bin/python3 /opt/3xui-cf-sync/sync_to_cf.py --env-file /opt/3xui-cf-sync/.env
+StandardOutput=journal
+StandardError=journal
