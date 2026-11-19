@@ -9,8 +9,10 @@ from sync_to_cf import (
     DEFAULT_JSON_UA,
     DEFAULT_RAW_UA,
     SyncConfig,
+    XuiClient,
     aggregate_clients_by_subid,
     build_public_sub_url,
+    load_config,
     run_sync,
 )
 
@@ -210,6 +212,31 @@ class SyncTests(unittest.TestCase):
             r2 = run_sync(cfg, xui, kv, now_ts=1100.0)
             self.assertEqual(r2["pushed"], 0)
             self.assertEqual(r2["skipped"], 1)
+
+    def test_xui_sub_host_sets_host_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = Path(tmp) / ".env"
+            env_file.write_text(
+                "XUI_SUB_URL=https://127.0.0.1:2096/sub\n"
+                "XUI_SUB_HOST=68.68.249.61\n"
+                "CF_PUBLIC_DOMAIN=https://cf.example.com\n"
+                "CF_ACCOUNT_ID=acc\n"
+                "CF_API_TOKEN=tok\n"
+                "CF_KV_NAMESPACE_ID=ns\n",
+                encoding="utf-8",
+            )
+            cfg = load_config(env_file)
+            self.assertEqual(cfg.xui_sub_host, "68.68.249.61")
+            client = XuiClient(cfg)
+            seen = []
+
+            def fake_request(url, method="GET", headers=None, data=None):
+                seen.append((url, headers))
+                return 200, {}, b""
+
+            client._request = fake_request
+            client.fetch_subscription("sub123", cfg.xui_sub_url, DEFAULT_CLASH_UA)
+            self.assertEqual(seen[0][1]["Host"], "68.68.249.61")
 
 
 if __name__ == "__main__":

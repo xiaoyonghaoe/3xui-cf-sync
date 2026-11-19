@@ -47,6 +47,7 @@ class SyncConfig:
     max_stale_seconds: int
     delete_removed_from_kv: bool
     request_timeout: int
+    xui_sub_host: str = ""
 
 
 def load_env_file(path: Path) -> dict[str, str]:
@@ -129,6 +130,7 @@ def load_config(env_path: Path | None = None, require_cf: bool = True) -> SyncCo
         xui_sub_url=get("XUI_SUB_URL", "http://127.0.0.1:2096/sub").rstrip("/"),
         xui_sub_clash_url=get("XUI_SUB_CLASH_URL").rstrip("/"),
         xui_sub_json_url=get("XUI_SUB_JSON_URL").rstrip("/"),
+        xui_sub_host=get("XUI_SUB_HOST").strip(),
         cf_public_domain=cf_public_domain,
         cf_sub_prefix=normalize_sub_prefix(get("CF_SUB_PREFIX")),
         cf_account_id=cf_account_id,
@@ -217,10 +219,10 @@ class XuiClient:
 
     def fetch_subscription(self, sub_id: str, url_base: str, user_agent: str) -> tuple[int, dict[str, str], str]:
         target = f"{url_base.rstrip('/')}/{urllib.parse.quote(sub_id)}"
-        status, headers, body = self._request(
-            target,
-            headers={"User-Agent": user_agent, "Accept": "*/*"},
-        )
+        req_headers = {"User-Agent": user_agent, "Accept": "*/*"}
+        if self.cfg.xui_sub_host:
+            req_headers["Host"] = self.cfg.xui_sub_host
+        status, headers, body = self._request(target, headers=req_headers)
         return status, headers, body.decode("utf-8", errors="replace")
 
 
